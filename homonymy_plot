@@ -1,0 +1,136 @@
+import torch
+from transformers import BertTokenizer, BertModel
+import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+
+# Load pre-trained model tokenizer and model
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
+
+geo_sentences = ["Geologists study various types of rock formations.",
+"The cliff was composed of ancient, hardened volcanic rock.",
+"The rock surface was smooth, polished by years of water flow.",
+"Fossil imprints were discovered in the sedimentary rock layer.",
+"Mineral veins were visible throughout the granite rock.",
+"Erosion had shaped the rock into a unique formation.",
+"Rock climbing is a popular activity on that rugged mountain.",
+"The geologist explained the rock cycle in detail.",
+"She picked up a smooth, round rock from the riverbed.",
+"Climbers often face challenges finding grips on slick rock surfaces.",
+"The sedimentary rock displayed layers of earth's history.",
+"Lava cooled rapidly, forming igneous rock.",
+"The quarry was known for its high-quality building rock.",
+"Rock samples were collected for scientific analysis.",
+"The pathway was near a decorative rock.",
+"A landslide sent a rock tumbling down the hillside.",
+"He used a hammer to break the rock into smaller pieces.",
+"Fossils are often found embedded in rock.",
+"The rock had a unique, crystalline structure.",
+"Rock formations created a natural bridge across the canyon.",
+"She studied the mineral content of the rock.",
+"The rock  was covered in moss and lichen.",
+"A rock slide closed the mountain road.",
+"The children enjoyed skipping a rock or two across the pond.",
+"Rock layers revealed the geological history of the area.",
+"The rock was surprisingly heavy for its size.",
+"Rock climbing requires both physical strength and mental strategy."]
+music_sentences = ["The band's new album features a mix of classic and modern rock.",
+"She turned up the volume when her favorite rock song came on.",
+"Rock festivals often attract thousands of music enthusiasts.",
+"Their style of rock is influenced by blues and jazz.",
+"Iconic rock musicians often inspire new generations of artists.",
+"The radio station plays a variety of rock hits from the 80s and 90s.",
+"He learned to play the guitar by practicing rock anthems.", "The rock band's concert sold out within minutes.",
+"He played an electric guitar in a rock group.",
+"Rock 'n' roll greatly influenced the music of the 20th century.",
+"They spent the night listening to classic rock records.",
+"The rock star was known for his dynamic performances.",
+"Her voice brought a unique sound to rock music.",
+"The festival celebrated the evolution of rock over the decades.",
+"He wrote a thesis on the history of rock music.",
+"The rock album featured a blend of different musical styles.",
+"Their rock song topped the charts for several weeks.",
+"She collected rock posters from the 1970s.",
+"The radio station specialized in alternative rock music.",
+"Rock musicians often experiment with different sounds and techniques.",
+"The documentary highlighted the golden era of rock.",
+"Rock ballads were a significant part of their repertoire.",
+"Fans gathered for the annual rock music awards.",
+"The rock anthem became an instant hit.",
+"Rock music festivals are known for their energetic crowds.",
+"The rock guitarist showcased impressive skills during the solo.",
+"They fused elements of jazz and blues into their rock sound.",]
+
+def get_embeddings(sentences, word):
+    initial_embeddings = []
+    contextual_embeddings = []
+
+    for sentence in sentences:
+        # Add special tokens to the sentence and tokenize
+        inputs = tokenizer(sentence, return_tensors='pt', add_special_tokens=True)
+
+        # Get tokens and their indexes
+        tokens = tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
+        word_indexes = [i for i, token in enumerate(tokens) if word in token]
+
+        # Forward pass, get hidden states
+        with torch.no_grad():
+            outputs = model(**inputs)
+            hidden_states = outputs.hidden_states
+
+        # Get initial embeddings
+        initial_embedding = hidden_states[0].squeeze(0)[word_indexes]
+        initial_embeddings.append(initial_embedding.mean(dim=0).numpy())
+
+        # Get final layer embeddings for the word
+        final_embedding = hidden_states[-1].squeeze(0)[word_indexes]
+        contextual_embeddings.append(final_embedding.mean(dim=0).numpy())
+
+    return np.array(initial_embeddings), np.array(contextual_embeddings)
+
+def plot_embeddings(initial_embeddings_geo, contextual_embeddings_geo, initial_embeddings_music, contextual_embeddings_music, title):
+    # Combine and scale embeddings
+
+    combined_embeddings = np.vstack((initial_embeddings_geo, contextual_embeddings_geo, initial_embeddings_music, contextual_embeddings_music))
+    scaler = StandardScaler()
+    scaled_embeddings = scaler.fit_transform(combined_embeddings)
+
+    # PCA transformation
+    pca = PCA(n_components=3)
+    reduced_embeddings = pca.fit_transform(scaled_embeddings)
+
+    # Split back into four sets
+    len_geo = len(initial_embeddings_geo)
+    len_music = len(initial_embeddings_music)
+    reduced_initial_geo = reduced_embeddings[:len_geo]
+    reduced_contextual_geo = reduced_embeddings[len_geo:2*len_geo]
+    reduced_initial_music = reduced_embeddings[2*len_geo:2*len_geo + len_music]
+    reduced_contextual_music = reduced_embeddings[2*len_geo + len_music:]
+
+    # Plotting
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(reduced_initial_geo[:,0], reduced_initial_geo[:,1], reduced_initial_geo[:,2], color='blue', marker='x', label='Initial Geographic')
+    ax.scatter(reduced_contextual_geo[:,0], reduced_contextual_geo[:,1], reduced_contextual_geo[:,2], color='blue', marker='^', label='Contextual Geographic')
+    ax.scatter(reduced_initial_music[:,0], reduced_initial_music[:,1], reduced_initial_music[:,2], color='red', marker='x', label='Initial Music')
+    ax.scatter(reduced_contextual_music[:,0], reduced_contextual_music[:,1], reduced_contextual_music[:,2], color='red', marker='^', label='Contextual Music')
+    ax.set_title(title, fontsize="large")
+    plt.legend(fontsize="small")
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_zticklabels([])
+
+
+    # Saving the figure. Adjust the DPI for higher or lower resolution.
+    plt.savefig('my_plot.png', dpi=500, bbox_inches='tight')
+
+    plt.show()
+
+
+
+# Visualize the embeddings
+plot_embeddings(initial_embeddings_geo, contextual_embeddings_geo, initial_embeddings_music, contextual_embeddings_music, "Initial and contextualized embeddings for 'rock'")
